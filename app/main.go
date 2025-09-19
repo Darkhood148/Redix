@@ -51,14 +51,7 @@ var GlobalStore = NewStore()
 func handleGet(conn net.Conn, key string) error {
 	val, ok := GlobalStore.Get(key)
 	if ok {
-		respStr, err := respWriter(BULK, val)
-		if err != nil {
-			return err
-		}
-		if _, err := conn.Write([]byte(respStr)); err != nil {
-			return err
-		}
-		return nil
+		return respWriter(conn, BULK, val)
 	} else {
 		if _, err := conn.Write([]byte("$-1\r\n")); err != nil {
 			return err
@@ -69,36 +62,15 @@ func handleGet(conn net.Conn, key string) error {
 
 func handleSet(conn net.Conn, key, value string) error {
 	GlobalStore.Set(key, value)
-	respStr, err := respWriter(SIMPLE, "OK")
-	if err != nil {
-		return err
-	}
-	if _, err := conn.Write([]byte(respStr)); err != nil {
-		return err
-	}
-	return nil
+	return respWriter(conn, SIMPLE, "OK")
 }
 
 func handleEcho(conn net.Conn, str string) error {
-	respStr, err := respWriter(BULK, str)
-	if err != nil {
-		return err
-	}
-	if _, err := conn.Write([]byte(respStr)); err != nil {
-		return err
-	}
-	return nil
+	return respWriter(conn, BULK, str)
 }
 
 func handlePing(conn net.Conn) error {
-	respStr, err := respWriter(SIMPLE, "PONG")
-	if err != nil {
-		return err
-	}
-	if _, err := conn.Write([]byte(respStr)); err != nil {
-		return err
-	}
-	return nil
+	return respWriter(conn, SIMPLE, "PONG")
 }
 
 func respParser(conn net.Conn) ([]string, error) {
@@ -116,14 +88,18 @@ func respParser(conn net.Conn) ([]string, error) {
 	return args, nil
 }
 
-func respWriter(strType respStringType, str string) (string, error) {
+func respWriter(conn net.Conn, strType respStringType, str string) error {
+	var msg string
 	switch strType {
 	case BULK:
-		return fmt.Sprintf("$%d\r\n%s\r\n", len(str), str), nil
+		msg = fmt.Sprintf("$%d\r\n%s\r\n", len(str), str)
 	case SIMPLE:
-		return fmt.Sprintf("+%s\r\n", str), nil
+		msg = fmt.Sprintf("+%s\r\n", str)
 	}
-	return "", fmt.Errorf("unknown response type: %s", strType)
+	if _, err := conn.Write([]byte(msg)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func handleConnection(conn net.Conn) error {
