@@ -6,7 +6,9 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -27,21 +29,26 @@ const (
 var _ = net.Listen
 var _ = os.Exit
 
+type StoreValue struct {
+	value     string
+	expiresAt time.Time
+}
+
 type Store struct {
-	data map[string]string
+	data map[string]StoreValue
 }
 
 func NewStore() *Store {
 	return &Store{
-		data: make(map[string]string),
+		data: make(map[string]StoreValue),
 	}
 }
 
-func (s *Store) Set(key, value string) {
-	s.data[key] = value
+func (s *Store) Set(key string, value StoreValue) {
+	s.data[key] = StoreValue{value: value.value, expiresAt: value.expiresAt}
 }
 
-func (s *Store) Get(key string) (string, bool) {
+func (s *Store) Get(key string) (StoreValue, bool) {
 	val, ok := s.data[key]
 	return val, ok
 }
@@ -51,7 +58,15 @@ var GlobalStore = NewStore()
 func handleGet(conn net.Conn, key string) error {
 	val, ok := GlobalStore.Get(key)
 	if ok {
-		return respWriter(conn, BULK, val)
+		if time.Now().After(val.expiresAt) {
+			delete(GlobalStore.data, key)
+			if _, err := conn.Write([]byte("$-1\r\n")); err != nil {
+				return err
+			}
+			return nil
+		} else {
+			return respWriter(conn, BULK, val.value)
+		}
 	} else {
 		if _, err := conn.Write([]byte("$-1\r\n")); err != nil {
 			return err
@@ -60,8 +75,9 @@ func handleGet(conn net.Conn, key string) error {
 	}
 }
 
-func handleSet(conn net.Conn, key, value string) error {
-	GlobalStore.Set(key, value)
+func handleSet(conn net.Conn, key, value string, expireDuration time.Duration) error {
+	expiresAt := time.Now().Add(expireDuration)
+	GlobalStore.Set(key, StoreValue{value: value, expiresAt: expiresAt})
 	return respWriter(conn, SIMPLE, "OK")
 }
 
@@ -129,8 +145,22 @@ func handleConnection(conn net.Conn) error {
 				return err
 			}
 		case SET:
-			if err = handleSet(conn, args[1], args[2]); err != nil {
-				return err
+			if len(args) != 3 {
+				if strings.ToUpper(args[3]) != "PX" {
+					return fmt.Errorf("invalid arguments")
+				} else {
+					expires, err := strconv.Atoi(args[4])
+					if err != nil {
+						return err
+					}
+					if err = handleSet(conn, args[1], args[2], time.Duration(expires)*time.Millisecond); err != nil {
+						return err
+					}
+				}
+			} else {
+				if err = handleSet(conn, args[1], args[2], 24*time.Hour); err != nil {
+					return err
+				}
 			}
 		}
 	}
