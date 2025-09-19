@@ -1,15 +1,30 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"strings"
+)
+
+const (
+	ECHO = "ECHO"
+	PING = "PING"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
 var _ = net.Listen
 var _ = os.Exit
+
+func handleEcho(conn net.Conn, str string) error {
+	msg := fmt.Sprintf("$%d\r\n%s\r\n", len(str), str)
+	if _, err := conn.Write([]byte(msg)); err != nil {
+		return err
+	}
+	return nil
+}
 
 func handlePing(conn net.Conn) error {
 	if _, err := conn.Write([]byte("+PONG\r\n")); err != nil {
@@ -18,12 +33,26 @@ func handlePing(conn net.Conn) error {
 	return nil
 }
 
+func respParser(conn net.Conn) ([]string, error) {
+	var buf = make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	sep := []byte{'\r', '\n'}
+	parts := bytes.Split(buf[:n], sep)
+	var args []string
+	for i := 2; i < len(parts); i += 2 {
+		args = append(args, string(parts[i]))
+	}
+	return args, nil
+}
+
 func handleConnection(conn net.Conn) error {
 	defer conn.Close()
 
 	for {
-		var buf = make([]byte, 1024)
-		n, err := conn.Read(buf)
+		args, err := respParser(conn)
 		if err != nil {
 			if err != io.EOF {
 				return err
@@ -32,9 +61,15 @@ func handleConnection(conn net.Conn) error {
 				return nil
 			}
 		}
-		fmt.Printf("Received: %s", string(buf[:n]))
-		if err = handlePing(conn); err != nil {
-			return err
+		switch strings.ToUpper(args[0]) {
+		case PING:
+			if err = handlePing(conn); err != nil {
+				return err
+			}
+		case ECHO:
+			if err = handleEcho(conn, args[1]); err != nil {
+				return err
+			}
 		}
 	}
 }
