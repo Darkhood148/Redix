@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	ECHO  = "ECHO"
-	PING  = "PING"
-	GET   = "GET"
-	SET   = "SET"
-	RPUSH = "RPUSH"
+	ECHO   = "ECHO"
+	PING   = "PING"
+	GET    = "GET"
+	SET    = "SET"
+	RPUSH  = "RPUSH"
+	LRANGE = "LRANGE"
 )
 
 type respStringType string
@@ -25,6 +26,7 @@ const (
 	BULK    respStringType = "BULK"
 	SIMPLE  respStringType = "SIMPLE"
 	INTEGER respStringType = "INTEGER"
+	ARRAY   respStringType = "ARRAY"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -66,7 +68,27 @@ func (s *Store) Rpush(key string, value []string) {
 	}
 }
 
+func (s *Store) LRange(key string, start, stop int) []string {
+	if start >= len(s.lists[key]) {
+		return []string{}
+	}
+	return s.lists[key][start:min(stop+1, len(s.lists[key]))]
+}
+
 var GlobalStore = NewStore()
+
+func handleLRange(conn net.Conn, key, l, r string) error {
+	left, err := strconv.Atoi(l)
+	if err != nil {
+		return err
+	}
+	right, err := strconv.Atoi(r)
+	if err != nil {
+		return err
+	}
+	elem := GlobalStore.LRange(key, left, right)
+	return respArray(conn, elem)
+}
 
 func handleRpush(conn net.Conn, key string, value []string) error {
 	GlobalStore.Rpush(key, value)
@@ -121,6 +143,18 @@ func respParser(conn net.Conn) ([]string, error) {
 		args = append(args, string(parts[i]))
 	}
 	return args, nil
+}
+
+func respArray(conn net.Conn, a []string) error {
+	msg := fmt.Sprintf("*%d\r\n", len(a))
+	for _, v := range a {
+		msg += fmt.Sprintf("$%d\r\n", len(v))
+		msg += fmt.Sprintf("%s\r\n", v)
+	}
+	if _, err := conn.Write([]byte(msg)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func respWriter(conn net.Conn, strType respStringType, str string) error {
@@ -185,6 +219,10 @@ func handleConnection(conn net.Conn) error {
 			}
 		case RPUSH:
 			if err = handleRpush(conn, args[1], args[2:]); err != nil {
+				return err
+			}
+		case LRANGE:
+			if err = handleLRange(conn, args[1], args[2], args[3]); err != nil {
 				return err
 			}
 		}
