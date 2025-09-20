@@ -57,18 +57,18 @@ func (s *Store) Get(key string) (StoreValue, bool) {
 	return val, ok
 }
 
-func (s *Store) Rpush(key string, value string) {
+func (s *Store) Rpush(key string, value []string) {
 	val, ok := s.lists[key]
 	if ok {
-		s.lists[key] = append(val, value)
+		s.lists[key] = append(val, value...)
 	} else {
-		s.lists[key] = []string{value}
+		s.lists[key] = value
 	}
 }
 
 var GlobalStore = NewStore()
 
-func handleRpush(conn net.Conn, key string, value string) error {
+func handleRpush(conn net.Conn, key string, value []string) error {
 	GlobalStore.Rpush(key, value)
 	length := len(GlobalStore.lists[key])
 	return respWriter(conn, INTEGER, strconv.Itoa(length))
@@ -184,7 +184,7 @@ func handleConnection(conn net.Conn) error {
 				}
 			}
 		case RPUSH:
-			if err = handleRpush(conn, args[1], args[2]); err != nil {
+			if err = handleRpush(conn, args[1], args[2:]); err != nil {
 				return err
 			}
 		}
