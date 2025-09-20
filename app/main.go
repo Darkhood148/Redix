@@ -86,6 +86,15 @@ func handleLRange(conn net.Conn, key, l, r string) error {
 	if err != nil {
 		return err
 	}
+	n := len(GlobalStore.lists[key])
+	if left < 0 {
+		left += n
+	}
+	left = max(left, 0)
+	for right < 0 {
+		right += n
+	}
+	right = min(right, n-1)
 	elem := GlobalStore.LRange(key, left, right)
 	return respArray(conn, elem)
 }
