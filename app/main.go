@@ -12,17 +12,19 @@ import (
 )
 
 const (
-	ECHO = "ECHO"
-	PING = "PING"
-	GET  = "GET"
-	SET  = "SET"
+	ECHO  = "ECHO"
+	PING  = "PING"
+	GET   = "GET"
+	SET   = "SET"
+	RPUSH = "RPUSH"
 )
 
 type respStringType string
 
 const (
-	BULK   respStringType = "BULK"
-	SIMPLE respStringType = "SIMPLE"
+	BULK    respStringType = "BULK"
+	SIMPLE  respStringType = "SIMPLE"
+	INTEGER respStringType = "INTEGER"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -35,12 +37,14 @@ type StoreValue struct {
 }
 
 type Store struct {
-	data map[string]StoreValue
+	data  map[string]StoreValue
+	lists map[string][]string
 }
 
 func NewStore() *Store {
 	return &Store{
-		data: make(map[string]StoreValue),
+		data:  make(map[string]StoreValue),
+		lists: make(map[string][]string),
 	}
 }
 
@@ -53,7 +57,22 @@ func (s *Store) Get(key string) (StoreValue, bool) {
 	return val, ok
 }
 
+func (s *Store) Rpush(key string, value string) {
+	val, ok := s.lists[key]
+	if ok {
+		s.lists[key] = append(val, value)
+	} else {
+		s.lists[key] = []string{value}
+	}
+}
+
 var GlobalStore = NewStore()
+
+func handleRpush(conn net.Conn, key string, value string) error {
+	GlobalStore.Rpush(key, value)
+	length := len(GlobalStore.lists[key])
+	return respWriter(conn, INTEGER, strconv.Itoa(length))
+}
 
 func handleGet(conn net.Conn, key string) error {
 	val, ok := GlobalStore.Get(key)
@@ -111,6 +130,8 @@ func respWriter(conn net.Conn, strType respStringType, str string) error {
 		msg = fmt.Sprintf("$%d\r\n%s\r\n", len(str), str)
 	case SIMPLE:
 		msg = fmt.Sprintf("+%s\r\n", str)
+	case INTEGER:
+		msg = fmt.Sprintf(":%s\r\n", str)
 	}
 	if _, err := conn.Write([]byte(msg)); err != nil {
 		return err
@@ -161,6 +182,10 @@ func handleConnection(conn net.Conn) error {
 				if err = handleSet(conn, args[1], args[2], 24*time.Hour); err != nil {
 					return err
 				}
+			}
+		case RPUSH:
+			if err = handleRpush(conn, args[1], args[2]); err != nil {
+				return err
 			}
 		}
 	}
