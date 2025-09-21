@@ -24,6 +24,7 @@ const (
 	LLEN   = "LLEN"
 	LPOP   = "LPOP"
 	BLPOP  = "BLPOP"
+	TYPE   = "TYPE"
 )
 
 type respStringType string
@@ -140,6 +141,15 @@ func (s *Store) LPopMultiple(key string, num int) []string {
 }
 
 var GlobalStore = NewStore()
+
+func handleType(conn net.Conn, key string) error {
+	_, ok := GlobalStore.Get(key)
+	if !ok {
+		return respWriter(conn, SIMPLE, "none")
+	} else {
+		return respWriter(conn, SIMPLE, "string")
+	}
+}
 
 func handleBlpop(conn net.Conn, key, wait string) error {
 	waitTime, err := strconv.ParseFloat(wait, 64)
@@ -415,6 +425,10 @@ func handleConnection(conn net.Conn) error {
 			}
 		case BLPOP:
 			if err = handleBlpop(conn, args[1], args[2]); err != nil {
+				return err
+			}
+		case TYPE:
+			if err = handleType(conn, args[1]); err != nil {
 				return err
 			}
 		}
