@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ const (
 	SET    = "SET"
 	RPUSH  = "RPUSH"
 	LRANGE = "LRANGE"
+	LPUSH  = "LPUSH"
 )
 
 type respStringType string
@@ -68,6 +70,16 @@ func (s *Store) Rpush(key string, value []string) {
 	}
 }
 
+func (s *Store) Lpush(key string, value []string) {
+	val, ok := s.lists[key]
+	if ok {
+		slices.Reverse(value)
+		s.lists[key] = append(value, val...)
+	} else {
+		s.lists[key] = value
+	}
+}
+
 func (s *Store) LRange(key string, start, stop int) []string {
 	if start >= len(s.lists[key]) {
 		return []string{}
@@ -101,6 +113,12 @@ func handleLRange(conn net.Conn, key, l, r string) error {
 
 func handleRpush(conn net.Conn, key string, value []string) error {
 	GlobalStore.Rpush(key, value)
+	length := len(GlobalStore.lists[key])
+	return respWriter(conn, INTEGER, strconv.Itoa(length))
+}
+
+func handleLPush(conn net.Conn, key string, value []string) error {
+	GlobalStore.Lpush(key, value)
 	length := len(GlobalStore.lists[key])
 	return respWriter(conn, INTEGER, strconv.Itoa(length))
 }
@@ -232,6 +250,10 @@ func handleConnection(conn net.Conn) error {
 			}
 		case LRANGE:
 			if err = handleLRange(conn, args[1], args[2], args[3]); err != nil {
+				return err
+			}
+		case LPUSH:
+			if err = handleLPush(conn, args[1], args[2:]); err != nil {
 				return err
 			}
 		}
