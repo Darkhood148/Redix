@@ -20,6 +20,7 @@ const (
 	RPUSH  = "RPUSH"
 	LRANGE = "LRANGE"
 	LPUSH  = "LPUSH"
+	LLEN   = "LLEN"
 )
 
 type respStringType string
@@ -119,6 +120,11 @@ func handleRpush(conn net.Conn, key string, value []string) error {
 
 func handleLPush(conn net.Conn, key string, value []string) error {
 	GlobalStore.Lpush(key, value)
+	length := len(GlobalStore.lists[key])
+	return respWriter(conn, INTEGER, strconv.Itoa(length))
+}
+
+func handleLlen(conn net.Conn, key string) error {
 	length := len(GlobalStore.lists[key])
 	return respWriter(conn, INTEGER, strconv.Itoa(length))
 }
@@ -254,6 +260,10 @@ func handleConnection(conn net.Conn) error {
 			}
 		case LPUSH:
 			if err = handleLPush(conn, args[1], args[2:]); err != nil {
+				return err
+			}
+		case LLEN:
+			if err = handleLlen(conn, args[1]); err != nil {
 				return err
 			}
 		}
