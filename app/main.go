@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,7 @@ const (
 	LPUSH  = "LPUSH"
 	LLEN   = "LLEN"
 	LPOP   = "LPOP"
+	BLPOP  = "BLPOP"
 )
 
 type respStringType string
@@ -43,14 +45,18 @@ type StoreValue struct {
 }
 
 type Store struct {
-	data  map[string]StoreValue
-	lists map[string][]string
+	data            map[string]StoreValue
+	lists           map[string][]string
+	mutList         map[string]*sync.RWMutex
+	blockedChannels map[string][]chan string
 }
 
 func NewStore() *Store {
 	return &Store{
-		data:  make(map[string]StoreValue),
-		lists: make(map[string][]string),
+		data:            make(map[string]StoreValue),
+		lists:           make(map[string][]string),
+		mutList:         make(map[string]*sync.RWMutex),
+		blockedChannels: make(map[string][]chan string),
 	}
 }
 
@@ -63,8 +69,18 @@ func (s *Store) Get(key string) (StoreValue, bool) {
 	return val, ok
 }
 
+func (s *Store) GetMutex(key string) *sync.RWMutex {
+	if _, ok := s.mutList[key]; !ok {
+		s.mutList[key] = &sync.RWMutex{}
+	}
+	return s.mutList[key]
+}
+
 func (s *Store) Rpush(key string, value []string) {
 	val, ok := s.lists[key]
+	mutex := s.GetMutex(key)
+	mutex.Lock()
+	defer mutex.Unlock()
 	if ok {
 		s.lists[key] = append(val, value...)
 	} else {
@@ -74,6 +90,9 @@ func (s *Store) Rpush(key string, value []string) {
 
 func (s *Store) Lpush(key string, value []string) {
 	val, ok := s.lists[key]
+	mutex := s.GetMutex(key)
+	mutex.Lock()
+	defer mutex.Unlock()
 	if ok {
 		slices.Reverse(value)
 		s.lists[key] = append(value, val...)
@@ -83,6 +102,9 @@ func (s *Store) Lpush(key string, value []string) {
 }
 
 func (s *Store) LRange(key string, start, stop int) []string {
+	mutex := s.GetMutex(key)
+	mutex.RLock()
+	defer mutex.RUnlock()
 	if start >= len(s.lists[key]) {
 		return []string{}
 	}
@@ -90,6 +112,9 @@ func (s *Store) LRange(key string, start, stop int) []string {
 }
 
 func (s *Store) LPop(key string) string {
+	mutex := s.GetMutex(key)
+	mutex.Lock()
+	defer mutex.Unlock()
 	val, ok := s.lists[key]
 	if !ok {
 		return ""
@@ -101,6 +126,9 @@ func (s *Store) LPop(key string) string {
 }
 
 func (s *Store) LPopMultiple(key string, num int) []string {
+	mutex := s.GetMutex(key)
+	mutex.Lock()
+	defer mutex.Unlock()
 	val, ok := s.lists[key]
 	if !ok {
 		return []string{}
@@ -112,6 +140,36 @@ func (s *Store) LPopMultiple(key string, num int) []string {
 }
 
 var GlobalStore = NewStore()
+
+func handleBlpop(conn net.Conn, key, wait string) error {
+	waitTime, err := strconv.Atoi(wait)
+	if err != nil {
+		return err
+	}
+	if len(GlobalStore.lists[key]) > 0 {
+		val := GlobalStore.LPop(key)
+		return respArray(conn, []string{key, val})
+	}
+	if waitTime == 0 {
+		ch := make(chan string, 1)
+		defer close(ch)
+		GlobalStore.blockedChannels[key] = append(GlobalStore.blockedChannels[key], ch)
+		val := <-ch
+		return respArray(conn, []string{key, val})
+	}
+	timeout := time.After(time.Duration(waitTime) * time.Second)
+	ch := make(chan string, 1)
+	defer close(ch)
+	GlobalStore.blockedChannels[key] = append(GlobalStore.blockedChannels[key], ch)
+
+	select {
+	case val := <-ch:
+		return respArray(conn, []string{key, val})
+	case <-timeout:
+		_, err := conn.Write([]byte("$-1\r\n"))
+		return err
+	}
+}
 
 func handleLRange(conn net.Conn, key, l, r string) error {
 	left, err := strconv.Atoi(l)
@@ -138,12 +196,29 @@ func handleLRange(conn net.Conn, key, l, r string) error {
 func handleRpush(conn net.Conn, key string, value []string) error {
 	GlobalStore.Rpush(key, value)
 	length := len(GlobalStore.lists[key])
+	for _, channel := range GlobalStore.blockedChannels[key] {
+		if len(value) == 0 {
+			break
+		}
+		channel <- value[0]
+		value = value[1:]
+		GlobalStore.blockedChannels[key] = GlobalStore.blockedChannels[key][1:]
+	}
 	return respWriter(conn, INTEGER, strconv.Itoa(length))
 }
 
 func handleLPush(conn net.Conn, key string, value []string) error {
 	GlobalStore.Lpush(key, value)
 	length := len(GlobalStore.lists[key])
+	for _, channel := range GlobalStore.blockedChannels[key] {
+		if len(value) == 0 {
+			break
+		}
+		// last element was first inserted in case of Lpush
+		channel <- value[len(value)-1]
+		value = value[:len(value)-1]
+		GlobalStore.blockedChannels[key] = GlobalStore.blockedChannels[key][1:]
+	}
 	return respWriter(conn, INTEGER, strconv.Itoa(length))
 }
 
@@ -328,6 +403,10 @@ func handleConnection(conn net.Conn) error {
 				if err = handleLpop(conn, args[1]); err != nil {
 					return err
 				}
+			}
+		case BLPOP:
+			if err = handleBlpop(conn, args[1], args[2]); err != nil {
+				return err
 			}
 		}
 	}
