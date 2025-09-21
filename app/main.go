@@ -142,7 +142,7 @@ func (s *Store) LPopMultiple(key string, num int) []string {
 var GlobalStore = NewStore()
 
 func handleBlpop(conn net.Conn, key, wait string) error {
-	waitTime, err := strconv.Atoi(wait)
+	waitTime, err := strconv.ParseFloat(wait, 64)
 	if err != nil {
 		return err
 	}
@@ -157,16 +157,25 @@ func handleBlpop(conn net.Conn, key, wait string) error {
 		val := <-ch
 		return respArray(conn, []string{key, val})
 	}
-	timeout := time.After(time.Duration(waitTime) * time.Second)
 	ch := make(chan string, 1)
 	defer close(ch)
 	GlobalStore.blockedChannels[key] = append(GlobalStore.blockedChannels[key], ch)
-
+	time.Sleep(time.Duration(waitTime * float64(time.Second)))
 	select {
 	case val := <-ch:
 		return respArray(conn, []string{key, val})
-	case <-timeout:
-		_, err := conn.Write([]byte("$-1\r\n"))
+	default:
+		mutex := GlobalStore.GetMutex(key)
+		mutex.Lock()
+		defer mutex.Unlock()
+		chans := GlobalStore.blockedChannels[key]
+		for i, c := range chans {
+			if c == ch {
+				GlobalStore.blockedChannels[key] = append(chans[:i], chans[i+1:]...)
+				break
+			}
+		}
+		_, err := conn.Write([]byte("*-1\r\n"))
 		return err
 	}
 }
