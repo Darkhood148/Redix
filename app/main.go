@@ -100,6 +100,17 @@ func (s *Store) LPop(key string) string {
 	}
 }
 
+func (s *Store) LPopMultiple(key string, num int) []string {
+	val, ok := s.lists[key]
+	if !ok {
+		return []string{}
+	} else {
+		values := val[:num]
+		s.lists[key] = val[num:]
+		return values
+	}
+}
+
 var GlobalStore = NewStore()
 
 func handleLRange(conn net.Conn, key, l, r string) error {
@@ -150,6 +161,24 @@ func handleLpop(conn net.Conn, key string) error {
 	} else {
 		val := GlobalStore.LPop(key)
 		return respWriter(conn, BULK, val)
+	}
+}
+
+func handleLpopMultiple(conn net.Conn, key string, n string) error {
+	num, err := strconv.Atoi(n)
+	if err != nil {
+		return err
+	}
+	if len(GlobalStore.lists[key]) == 0 {
+		if _, err := conn.Write([]byte("$-1\r\n")); err != nil {
+			return err
+		}
+		return nil
+	} else if len(GlobalStore.lists[key]) <= num {
+		return respArray(conn, GlobalStore.lists[key])
+	} else {
+		values := GlobalStore.LPopMultiple(key, num)
+		return respArray(conn, values)
 	}
 }
 
@@ -291,8 +320,14 @@ func handleConnection(conn net.Conn) error {
 				return err
 			}
 		case LPOP:
-			if err = handleLpop(conn, args[1]); err != nil {
-				return err
+			if len(args) != 2 {
+				if err = handleLpopMultiple(conn, args[1], args[2]); err != nil {
+					return err
+				}
+			} else {
+				if err = handleLpop(conn, args[1]); err != nil {
+					return err
+				}
 			}
 		}
 	}
