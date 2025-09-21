@@ -21,6 +21,7 @@ const (
 	LRANGE = "LRANGE"
 	LPUSH  = "LPUSH"
 	LLEN   = "LLEN"
+	LPOP   = "LPOP"
 )
 
 type respStringType string
@@ -88,6 +89,17 @@ func (s *Store) LRange(key string, start, stop int) []string {
 	return s.lists[key][start:min(stop+1, len(s.lists[key]))]
 }
 
+func (s *Store) LPop(key string) string {
+	val, ok := s.lists[key]
+	if !ok {
+		return ""
+	} else {
+		value := val[0]
+		s.lists[key] = val[1:]
+		return value
+	}
+}
+
 var GlobalStore = NewStore()
 
 func handleLRange(conn net.Conn, key, l, r string) error {
@@ -127,6 +139,18 @@ func handleLPush(conn net.Conn, key string, value []string) error {
 func handleLlen(conn net.Conn, key string) error {
 	length := len(GlobalStore.lists[key])
 	return respWriter(conn, INTEGER, strconv.Itoa(length))
+}
+
+func handleLpop(conn net.Conn, key string) error {
+	if len(GlobalStore.lists[key]) == 0 {
+		if _, err := conn.Write([]byte("$-1\r\n")); err != nil {
+			return err
+		}
+		return nil
+	} else {
+		val := GlobalStore.LPop(key)
+		return respWriter(conn, BULK, val)
+	}
 }
 
 func handleGet(conn net.Conn, key string) error {
@@ -264,6 +288,10 @@ func handleConnection(conn net.Conn) error {
 			}
 		case LLEN:
 			if err = handleLlen(conn, args[1]); err != nil {
+				return err
+			}
+		case LPOP:
+			if err = handleLpop(conn, args[1]); err != nil {
 				return err
 			}
 		}
