@@ -7,6 +7,9 @@ import (
 )
 
 func verifyId(stream string, id string) error {
+	if id == "*" {
+		return nil
+	}
 	sep := strings.Split(id, "-")
 	if len(sep) != 2 {
 		return errors.New("Invalid ID")
@@ -52,6 +55,9 @@ func verifyId(stream string, id string) error {
 }
 
 func completeId(stream string, id string) (string, error) {
+	if id == "*" {
+		return "*", nil
+	}
 	sep := strings.Split(id, "-")
 	if sep[1] != "*" {
 		return id, nil
