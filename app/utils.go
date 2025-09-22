@@ -15,6 +15,9 @@ func verifyId(stream string, id string) error {
 	if err != nil {
 		return errors.New("Invalid ID")
 	}
+	if sep[1] == "*" {
+		return nil
+	}
 	n, err := strconv.Atoi(sep[1])
 	if err != nil {
 		return errors.New("Invalid ID")
@@ -45,5 +48,30 @@ func verifyId(stream string, id string) error {
 			return nil
 		}
 		return errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+	}
+}
+
+func completeId(stream string, id string) (string, error) {
+	sep := strings.Split(id, "-")
+	if sep[1] != "*" {
+		return id, nil
+	}
+	x := GlobalStore.streams[stream]
+	if len(x) == 0 {
+		if sep[0] != "0" {
+			return sep[0] + "-0", nil
+		} else {
+			return sep[0] + "-1", nil
+		}
+	} else {
+		mx := -1
+		for _, entry := range x {
+			sep2 := strings.Split(entry.ID, "-")
+			if sep2[0] == sep[0] {
+				n, _ := strconv.Atoi(sep2[1])
+				mx = max(mx, n)
+			}
+		}
+		return sep[0] + "-" + strconv.Itoa(mx+1), nil
 	}
 }

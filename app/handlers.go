@@ -10,6 +10,10 @@ func handleXadd(conn net.Conn, stream string, id string, args []string) error {
 	if err := verifyId(stream, id); err != nil {
 		return respWriter(conn, ERROR, err.Error())
 	}
+	id, err := completeId(stream, id)
+	if err != nil {
+		return err
+	}
 	tmp := make(map[string]string)
 	for i := 0; i < len(args); i += 2 {
 		tmp[args[i]] = args[i+1]
