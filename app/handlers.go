@@ -6,12 +6,16 @@ import (
 	"time"
 )
 
-func handleXadd(conn net.Conn, id string, entryId string, args []string) error {
-	GlobalStore.streams[id] = make(map[string]string)
-	for i := 0; i < len(args); i += 2 {
-		GlobalStore.streams[id][args[i]] = args[i+1]
+func handleXadd(conn net.Conn, stream string, id string, args []string) error {
+	if err := verifyId(stream, id); err != nil {
+		return respWriter(conn, ERROR, err.Error())
 	}
-	return respWriter(conn, BULK, entryId)
+	tmp := make(map[string]string)
+	for i := 0; i < len(args); i += 2 {
+		tmp[args[i]] = args[i+1]
+	}
+	GlobalStore.XAdd(stream, id, tmp)
+	return respWriter(conn, BULK, id)
 }
 
 func handleType(conn net.Conn, key string) error {

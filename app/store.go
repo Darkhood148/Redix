@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -11,12 +12,17 @@ type StoreValue struct {
 	expiresAt time.Time
 }
 
+type StreamEntry struct {
+	ID     string
+	Fields map[string]string
+}
+
 type Store struct {
 	data            map[string]StoreValue
 	lists           map[string][]string
 	mutList         map[string]*sync.RWMutex
 	blockedChannels map[string][]chan string
-	streams         map[string]map[string]string
+	streams         map[string][]StreamEntry
 }
 
 func NewStore() *Store {
@@ -25,7 +31,7 @@ func NewStore() *Store {
 		lists:           make(map[string][]string),
 		mutList:         make(map[string]*sync.RWMutex),
 		blockedChannels: make(map[string][]chan string),
-		streams:         make(map[string]map[string]string),
+		streams:         make(map[string][]StreamEntry),
 	}
 }
 
@@ -106,4 +112,13 @@ func (s *Store) LPopMultiple(key string, num int) []string {
 		s.lists[key] = val[num:]
 		return values
 	}
+}
+
+func (s *Store) XAdd(stream, id string, fields map[string]string) string {
+	if id == "*" {
+		id = fmt.Sprintf("%d-0", time.Now().UnixNano()/1e6)
+	}
+	entry := StreamEntry{ID: id, Fields: fields}
+	s.streams[stream] = append(s.streams[stream], entry)
+	return id
 }

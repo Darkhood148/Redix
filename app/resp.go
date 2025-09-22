@@ -13,6 +13,7 @@ const (
 	SIMPLE  respStringType = "SIMPLE"
 	INTEGER respStringType = "INTEGER"
 	ARRAY   respStringType = "ARRAY"
+	ERROR   respStringType = "ERROR"
 )
 
 func respParser(conn net.Conn) ([]string, error) {
@@ -51,6 +52,8 @@ func respWriter(conn net.Conn, strType respStringType, str string) error {
 		msg = fmt.Sprintf("+%s\r\n", str)
 	case INTEGER:
 		msg = fmt.Sprintf(":%s\r\n", str)
+	case ERROR:
+		msg = fmt.Sprintf("-%s\r\n", str)
 	}
 	if _, err := conn.Write([]byte(msg)); err != nil {
 		return err
