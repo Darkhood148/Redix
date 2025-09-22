@@ -2,8 +2,10 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func verifyId(stream string, id string) error {
@@ -56,7 +58,7 @@ func verifyId(stream string, id string) error {
 
 func completeId(stream string, id string) (string, error) {
 	if id == "*" {
-		return "*", nil
+		return fmt.Sprintf("%d-0", time.Now().UnixNano()/1e6), nil
 	}
 	sep := strings.Split(id, "-")
 	if sep[1] != "*" {
