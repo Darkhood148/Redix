@@ -23,6 +23,7 @@ const (
 	BLPOP  = "BLPOP"
 	TYPE   = "TYPE"
 	XADD   = "XADD"
+	XRANGE = "XRANGE"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -111,6 +112,10 @@ func handleConnection(conn net.Conn) error {
 			}
 		case XADD:
 			if err = handleXadd(conn, args[1], args[2], args[3:]); err != nil {
+				return err
+			}
+		case XRANGE:
+			if err = handleXrange(conn, args[1], args[2], args[3]); err != nil {
 				return err
 			}
 		}

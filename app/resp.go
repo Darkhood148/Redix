@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 )
@@ -29,6 +30,33 @@ func respParser(conn net.Conn) ([]string, error) {
 		args = append(args, string(parts[i]))
 	}
 	return args, nil
+}
+
+func respAny(conn net.Conn, data interface{}) error {
+	switch t := data.(type) {
+	case []RespSerialized:
+		fmt.Println("Here1")
+		fmt.Println(len(t))
+		msg := fmt.Sprintf("*%d\r\n", len(t))
+		if _, err := conn.Write([]byte(msg)); err != nil {
+			return err
+		}
+		for _, elem := range t {
+			entryMsg := "*2\r\n"
+			if _, err := conn.Write([]byte(entryMsg)); err != nil {
+				return err
+			}
+			if err := respWriter(conn, BULK, elem.id); err != nil {
+				return err
+			}
+			if err := respArray(conn, elem.fields); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return errors.New("unsupported data type")
+	}
 }
 
 func respArray(conn net.Conn, a []string) error {

@@ -14,6 +14,7 @@ type StoreValue struct {
 
 type StreamEntry struct {
 	ID     string
+	mu     *sync.RWMutex
 	Fields map[string]string
 }
 
@@ -21,6 +22,7 @@ type Store struct {
 	data            map[string]StoreValue
 	lists           map[string][]string
 	mutList         map[string]*sync.RWMutex
+	mutStream       map[string]*sync.RWMutex
 	blockedChannels map[string][]chan string
 	streams         map[string][]StreamEntry
 }
@@ -30,6 +32,7 @@ func NewStore() *Store {
 		data:            make(map[string]StoreValue),
 		lists:           make(map[string][]string),
 		mutList:         make(map[string]*sync.RWMutex),
+		mutStream:       make(map[string]*sync.RWMutex),
 		blockedChannels: make(map[string][]chan string),
 		streams:         make(map[string][]StreamEntry),
 	}
@@ -44,7 +47,7 @@ func (s *Store) Get(key string) (StoreValue, bool) {
 	return val, ok
 }
 
-func (s *Store) GetMutex(key string) *sync.RWMutex {
+func (s *Store) GetListMutex(key string) *sync.RWMutex {
 	if _, ok := s.mutList[key]; !ok {
 		s.mutList[key] = &sync.RWMutex{}
 	}
@@ -53,7 +56,7 @@ func (s *Store) GetMutex(key string) *sync.RWMutex {
 
 func (s *Store) Rpush(key string, value []string) {
 	val, ok := s.lists[key]
-	mutex := s.GetMutex(key)
+	mutex := s.GetListMutex(key)
 	mutex.Lock()
 	defer mutex.Unlock()
 	if ok {
@@ -65,7 +68,7 @@ func (s *Store) Rpush(key string, value []string) {
 
 func (s *Store) Lpush(key string, value []string) {
 	val, ok := s.lists[key]
-	mutex := s.GetMutex(key)
+	mutex := s.GetListMutex(key)
 	mutex.Lock()
 	defer mutex.Unlock()
 	if ok {
@@ -77,7 +80,7 @@ func (s *Store) Lpush(key string, value []string) {
 }
 
 func (s *Store) LRange(key string, start, stop int) []string {
-	mutex := s.GetMutex(key)
+	mutex := s.GetListMutex(key)
 	mutex.RLock()
 	defer mutex.RUnlock()
 	if start >= len(s.lists[key]) {
@@ -87,7 +90,7 @@ func (s *Store) LRange(key string, start, stop int) []string {
 }
 
 func (s *Store) LPop(key string) string {
-	mutex := s.GetMutex(key)
+	mutex := s.GetListMutex(key)
 	mutex.Lock()
 	defer mutex.Unlock()
 	val, ok := s.lists[key]
@@ -101,7 +104,7 @@ func (s *Store) LPop(key string) string {
 }
 
 func (s *Store) LPopMultiple(key string, num int) []string {
-	mutex := s.GetMutex(key)
+	mutex := s.GetListMutex(key)
 	mutex.Lock()
 	defer mutex.Unlock()
 	val, ok := s.lists[key]
@@ -118,7 +121,18 @@ func (s *Store) XAdd(stream, id string, fields map[string]string) string {
 	if id == "*" {
 		id = fmt.Sprintf("%d-0", time.Now().UnixNano()/1e6)
 	}
-	entry := StreamEntry{ID: id, Fields: fields}
+	entry := StreamEntry{ID: id, mu: &sync.RWMutex{}, Fields: fields}
 	s.streams[stream] = append(s.streams[stream], entry)
 	return id
+}
+
+func (s *Store) XRange(stream, start, stop string) []StreamEntry {
+	steams := s.streams[stream]
+	var ans []StreamEntry
+	for _, entry := range steams {
+		if idsInRange(entry.ID, start, stop) {
+			ans = append(ans, entry)
+		}
+	}
+	return ans
 }

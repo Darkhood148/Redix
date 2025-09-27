@@ -6,6 +6,26 @@ import (
 	"time"
 )
 
+type RespSerialized struct {
+	id     string
+	fields []string
+}
+
+func handleXrange(conn net.Conn, stream, start, end string) error {
+	entries := GlobalStore.XRange(stream, start, end)
+	var data []RespSerialized
+	for _, entry := range entries {
+		element := RespSerialized{}
+		element.id = entry.ID
+		for key, value := range entry.Fields {
+			element.fields = append(element.fields, key)
+			element.fields = append(element.fields, value)
+		}
+		data = append(data, element)
+	}
+	return respAny(conn, data)
+}
+
 func handleXadd(conn net.Conn, stream string, id string, args []string) error {
 	if err := verifyId(stream, id); err != nil {
 		return respWriter(conn, ERROR, err.Error())
@@ -58,7 +78,7 @@ func handleBlpop(conn net.Conn, key, wait string) error {
 	case val := <-ch:
 		return respArray(conn, []string{key, val})
 	default:
-		mutex := GlobalStore.GetMutex(key)
+		mutex := GlobalStore.GetListMutex(key)
 		mutex.Lock()
 		defer mutex.Unlock()
 		chans := GlobalStore.blockedChannels[key]

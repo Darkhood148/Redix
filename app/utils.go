@@ -83,3 +83,80 @@ func completeId(stream string, id string) (string, error) {
 		return sep[0] + "-" + strconv.Itoa(mx+1), nil
 	}
 }
+
+func idGreaterThan(id, compare string) bool {
+	if compare == "-" {
+		return true
+	}
+	idSplit := strings.Split(id, "-")
+	compareSplit := strings.Split(compare, "-")
+	n1, err := strconv.Atoi(idSplit[0])
+	if err != nil {
+		return false
+	}
+	n2, err := strconv.Atoi(compareSplit[0])
+	if err != nil {
+		return false
+	}
+	if n1 > n2 {
+		return true
+	}
+	if n1 < n2 {
+		return false
+	}
+	if len(idSplit) == 1 {
+		return true
+	}
+	s1, err := strconv.Atoi(idSplit[1])
+	if err != nil {
+		return false
+	}
+	s2, err := strconv.Atoi(compareSplit[1])
+	if err != nil {
+		return false
+	}
+	if s1 >= s2 {
+		return true
+	} else {
+		return false
+	}
+}
+
+func idLessThan(id, compare string) bool {
+	idSplit := strings.Split(id, "-")
+	compareSplit := strings.Split(compare, "-")
+	n1, err := strconv.Atoi(idSplit[0])
+	if err != nil {
+		return false
+	}
+	n2, err := strconv.Atoi(compareSplit[0])
+	if err != nil {
+		return false
+	}
+	if n1 < n2 {
+		return true
+	}
+	if n1 > n2 {
+		return false
+	}
+	if len(idSplit) == 1 {
+		return true
+	}
+	s1, err := strconv.Atoi(idSplit[1])
+	if err != nil {
+		return false
+	}
+	s2, err := strconv.Atoi(compareSplit[1])
+	if err != nil {
+		return false
+	}
+	if s1 <= s2 {
+		return true
+	} else {
+		return false
+	}
+}
+
+func idsInRange(id, start, stop string) bool {
+	return idGreaterThan(id, start) && idLessThan(id, stop)
+}
