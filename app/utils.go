@@ -123,6 +123,9 @@ func idGreaterThan(id, compare string) bool {
 }
 
 func idLessThan(id, compare string) bool {
+	if compare == "+" {
+		return true
+	}
 	idSplit := strings.Split(id, "-")
 	compareSplit := strings.Split(compare, "-")
 	n1, err := strconv.Atoi(idSplit[0])
