@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 )
 
 type respStringType string
@@ -34,9 +35,7 @@ func respParser(conn net.Conn) ([]string, error) {
 
 func respAny(conn net.Conn, data interface{}) error {
 	switch t := data.(type) {
-	case []RespSerialized:
-		fmt.Println("Here1")
-		fmt.Println(len(t))
+	case []XRangeSerialized:
 		msg := fmt.Sprintf("*%d\r\n", len(t))
 		if _, err := conn.Write([]byte(msg)); err != nil {
 			return err
@@ -54,7 +53,21 @@ func respAny(conn net.Conn, data interface{}) error {
 			}
 		}
 		return nil
+	case XReadSerialized:
+		msg := fmt.Sprintf("*%d\r\n", len(t.entries))
+		if _, err := conn.Write([]byte(msg)); err != nil {
+			return err
+		}
+		entryMsg := "*2\r\n"
+		if _, err := conn.Write([]byte(entryMsg)); err != nil {
+			return err
+		}
+		if err := respWriter(conn, BULK, t.stream[0]); err != nil {
+			return err
+		}
+		return respAny(conn, t.entries)
 	default:
+		fmt.Println(reflect.TypeOf(t))
 		return errors.New("unsupported data type")
 	}
 }

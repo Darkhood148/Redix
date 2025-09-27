@@ -136,3 +136,13 @@ func (s *Store) XRange(stream, start, stop string) []StreamEntry {
 	}
 	return ans
 }
+
+func (s *Store) XRead(stream, id string) []StreamEntry {
+	var ans []StreamEntry
+	for _, entry := range s.streams[stream] {
+		if idGreaterThan(entry.ID, id) {
+			ans = append(ans, entry)
+		}
+	}
+	return ans
+}

@@ -1,21 +1,48 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"time"
 )
 
-type RespSerialized struct {
+type XRangeSerialized struct {
 	id     string
 	fields []string
 }
 
+type XReadSerialized struct {
+	stream  []string
+	entries []XRangeSerialized
+}
+
+func handleXread(conn net.Conn, stream, id string) error {
+	entries := GlobalStore.XRead(stream, id)
+	fmt.Println(entries)
+	var ans XReadSerialized
+	var data []XRangeSerialized
+	for _, entry := range entries {
+		element := XRangeSerialized{}
+		element.id = entry.ID
+		for key, value := range entry.Fields {
+			element.fields = append(element.fields, key)
+			element.fields = append(element.fields, value)
+		}
+		data = append(data, element)
+	}
+	var streams []string
+	streams = append(streams, stream)
+	ans.stream = streams
+	ans.entries = data
+	return respAny(conn, ans)
+}
+
 func handleXrange(conn net.Conn, stream, start, end string) error {
 	entries := GlobalStore.XRange(stream, start, end)
-	var data []RespSerialized
+	var data []XRangeSerialized
 	for _, entry := range entries {
-		element := RespSerialized{}
+		element := XRangeSerialized{}
 		element.id = entry.ID
 		for key, value := range entry.Fields {
 			element.fields = append(element.fields, key)
