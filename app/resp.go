@@ -35,20 +35,27 @@ func respParser(conn net.Conn) ([]string, error) {
 
 func respAny(conn net.Conn, data interface{}) error {
 	switch t := data.(type) {
+	case XRangeSerialized:
+		entryMsg := "*2\r\n"
+		if _, err := conn.Write([]byte(entryMsg)); err != nil {
+			return err
+		}
+		if err := respWriter(conn, BULK, t.id); err != nil {
+			return err
+		}
+		if err := respArray(conn, t.fields); err != nil {
+			return err
+		}
+		return nil
 	case []XRangeSerialized:
 		msg := fmt.Sprintf("*%d\r\n", len(t))
+		fmt.Println(len(t))
+		fmt.Println("Wtf")
 		if _, err := conn.Write([]byte(msg)); err != nil {
 			return err
 		}
 		for _, elem := range t {
-			entryMsg := "*2\r\n"
-			if _, err := conn.Write([]byte(entryMsg)); err != nil {
-				return err
-			}
-			if err := respWriter(conn, BULK, elem.id); err != nil {
-				return err
-			}
-			if err := respArray(conn, elem.fields); err != nil {
+			if err := respAny(conn, elem); err != nil {
 				return err
 			}
 		}
@@ -58,14 +65,19 @@ func respAny(conn net.Conn, data interface{}) error {
 		if _, err := conn.Write([]byte(msg)); err != nil {
 			return err
 		}
-		entryMsg := "*2\r\n"
-		if _, err := conn.Write([]byte(entryMsg)); err != nil {
-			return err
+		for i := 0; i < len(t.entries); i++ {
+			startMsg := "*2\r\n"
+			if _, err := conn.Write([]byte(startMsg)); err != nil {
+				return err
+			}
+			if err := respWriter(conn, BULK, t.stream[i]); err != nil {
+				return err
+			}
+			if err := respAny(conn, t.entries[i]); err != nil {
+				return err
+			}
 		}
-		if err := respWriter(conn, BULK, t.stream[0]); err != nil {
-			return err
-		}
-		return respAny(conn, t.entries)
+		return nil
 	default:
 		fmt.Println(reflect.TypeOf(t))
 		return errors.New("unsupported data type")

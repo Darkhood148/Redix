@@ -120,7 +120,7 @@ func handleConnection(conn net.Conn) error {
 				return err
 			}
 		case XREAD:
-			if err = handleXread(conn, args[2], args[3]); err != nil {
+			if err = handleXread(conn, args[2:]); err != nil {
 				return err
 			}
 		}

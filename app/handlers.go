@@ -14,27 +14,37 @@ type XRangeSerialized struct {
 
 type XReadSerialized struct {
 	stream  []string
-	entries []XRangeSerialized
+	entries [][]XRangeSerialized
 }
 
-func handleXread(conn net.Conn, stream, id string) error {
-	entries := GlobalStore.XRead(stream, id)
-	fmt.Println(entries)
+func handleXread(conn net.Conn, params []string) error {
 	var ans XReadSerialized
-	var data []XRangeSerialized
-	for _, entry := range entries {
-		element := XRangeSerialized{}
-		element.id = entry.ID
-		for key, value := range entry.Fields {
-			element.fields = append(element.fields, key)
-			element.fields = append(element.fields, value)
-		}
-		data = append(data, element)
-	}
 	var streams []string
-	streams = append(streams, stream)
+	var ids []string
+	for i := 0; i < len(params)/2; i++ {
+		streams = append(streams, params[i])
+		ids = append(ids, params[i+len(params)/2])
+	}
+	var lmao [][]XRangeSerialized
+	for i := 0; i < len(streams); i++ {
+		var data []XRangeSerialized
+		stream := streams[i]
+		id := ids[i]
+		entries := GlobalStore.XRead(stream, id)
+		fmt.Println(entries)
+		for _, entry := range entries {
+			element := XRangeSerialized{}
+			element.id = entry.ID
+			for key, value := range entry.Fields {
+				element.fields = append(element.fields, key)
+				element.fields = append(element.fields, value)
+			}
+			data = append(data, element)
+		}
+		lmao = append(lmao, data)
+	}
 	ans.stream = streams
-	ans.entries = data
+	ans.entries = lmao
 	return respAny(conn, ans)
 }
 
