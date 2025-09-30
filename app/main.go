@@ -26,6 +26,7 @@ const (
 	XRANGE = "XRANGE"
 	XREAD  = "XREAD"
 	INCR   = "INCR"
+	MULTI  = "MULTI"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -137,6 +138,10 @@ func handleConnection(conn net.Conn) error {
 			}
 		case INCR:
 			if err = handleIncr(conn, args[1]); err != nil {
+				return err
+			}
+		case MULTI:
+			if err = handleMulti(conn); err != nil {
 				return err
 			}
 		}

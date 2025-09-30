@@ -16,6 +16,10 @@ type XReadSerialized struct {
 	entries [][]XRangeSerialized
 }
 
+func handleMulti(conn net.Conn) error {
+	return respWriter(conn, SIMPLE, "OK")
+}
+
 func handleIncr(conn net.Conn, key string) error {
 	n, ok := GlobalStore.Get(key)
 	if !ok {
