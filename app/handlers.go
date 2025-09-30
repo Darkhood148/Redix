@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 	"time"
@@ -23,7 +22,13 @@ func handleXread(conn net.Conn, n int, params []string) error {
 	var ids []string
 	for i := 0; i < len(params)/2; i++ {
 		streams = append(streams, params[i])
-		ids = append(ids, params[i+len(params)/2])
+		if params[i+len(params)/2] == "$" {
+			x := GlobalStore.streams[streams[i]]
+			y := x[len(x)-1].ID
+			ids = append(ids, y)
+		} else {
+			ids = append(ids, params[i+len(params)/2])
+		}
 	}
 	var lmao [][]XRangeSerialized
 	added := false
@@ -32,7 +37,6 @@ func handleXread(conn net.Conn, n int, params []string) error {
 		stream := streams[i]
 		id := ids[i]
 		entries := GlobalStore.XRead(stream, id)
-		fmt.Println(entries)
 		for _, entry := range entries {
 			element := XRangeSerialized{}
 			element.id = entry.ID
@@ -60,7 +64,6 @@ func handleXread(conn net.Conn, n int, params []string) error {
 			stream := streams[i]
 			id := ids[i]
 			entries := GlobalStore.XRead(stream, id)
-			fmt.Println(entries)
 			for _, entry := range entries {
 				element := XRangeSerialized{}
 				element.id = entry.ID
@@ -91,7 +94,6 @@ func handleXread(conn net.Conn, n int, params []string) error {
 				stream := streams[i]
 				id := ids[i]
 				entries := GlobalStore.XRead(stream, id)
-				fmt.Println(entries)
 				for _, entry := range entries {
 					element := XRangeSerialized{}
 					element.id = entry.ID
