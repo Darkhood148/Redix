@@ -16,6 +16,24 @@ type XReadSerialized struct {
 	entries [][]XRangeSerialized
 }
 
+func handleIncr(conn net.Conn, key string) error {
+	n, ok := GlobalStore.Get(key)
+	if !ok {
+		GlobalStore.Set(key, StoreValue{
+			value:     "1",
+			expiresAt: time.Now().Add(24 * time.Hour),
+		})
+		return respWriter(conn, INTEGER, "1")
+	} else {
+		num, err := strconv.Atoi(n.value)
+		if err != nil {
+			return err
+		}
+		GlobalStore.Set(key, StoreValue{value: strconv.Itoa(num + 1), expiresAt: n.expiresAt})
+		return respWriter(conn, INTEGER, strconv.Itoa(num+1))
+	}
+}
+
 func handleXread(conn net.Conn, n int, params []string) error {
 	var ans XReadSerialized
 	var streams []string

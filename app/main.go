@@ -25,6 +25,7 @@ const (
 	XADD   = "XADD"
 	XRANGE = "XRANGE"
 	XREAD  = "XREAD"
+	INCR   = "INCR"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -133,6 +134,10 @@ func handleConnection(conn net.Conn) error {
 					return err
 				}
 
+			}
+		case INCR:
+			if err = handleIncr(conn, args[1]); err != nil {
+				return err
 			}
 		}
 	}
