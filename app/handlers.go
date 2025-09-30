@@ -27,7 +27,7 @@ func handleIncr(conn net.Conn, key string) error {
 	} else {
 		num, err := strconv.Atoi(n.value)
 		if err != nil {
-			return err
+			return respWriter(conn, ERROR, "ERR value is not an integer or out of range")
 		}
 		GlobalStore.Set(key, StoreValue{value: strconv.Itoa(num + 1), expiresAt: n.expiresAt})
 		return respWriter(conn, INTEGER, strconv.Itoa(num+1))
