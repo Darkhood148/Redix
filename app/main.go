@@ -121,7 +121,7 @@ func handleConnection(conn net.Conn) error {
 			}
 		case XREAD:
 			if strings.ToUpper(args[1]) != "BLOCK" {
-				if err = handleXread(conn, 0, args[2:]); err != nil {
+				if err = handleXread(conn, -1, args[2:]); err != nil {
 					return err
 				}
 			} else {

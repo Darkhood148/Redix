@@ -50,35 +50,68 @@ func handleXread(conn net.Conn, n int, params []string) error {
 		ans.entries = lmao
 		return respAny(conn, ans)
 	}
-	lmao = [][]XRangeSerialized{}
-	time.Sleep(time.Duration(n * int(time.Millisecond)))
-	for i := 0; i < len(streams); i++ {
-		var data []XRangeSerialized
-		stream := streams[i]
-		id := ids[i]
-		entries := GlobalStore.XRead(stream, id)
-		fmt.Println(entries)
-		for _, entry := range entries {
-			element := XRangeSerialized{}
-			element.id = entry.ID
-			for key, value := range entry.Fields {
-				element.fields = append(element.fields, key)
-				element.fields = append(element.fields, value)
-				added = true
+	if n != 0 {
+		lmao = [][]XRangeSerialized{}
+		if n > 0 {
+			time.Sleep(time.Duration(n * int(time.Millisecond)))
+		}
+		for i := 0; i < len(streams); i++ {
+			var data []XRangeSerialized
+			stream := streams[i]
+			id := ids[i]
+			entries := GlobalStore.XRead(stream, id)
+			fmt.Println(entries)
+			for _, entry := range entries {
+				element := XRangeSerialized{}
+				element.id = entry.ID
+				for key, value := range entry.Fields {
+					element.fields = append(element.fields, key)
+					element.fields = append(element.fields, value)
+					added = true
+				}
+				data = append(data, element)
 			}
-			data = append(data, element)
+			lmao = append(lmao, data)
 		}
-		lmao = append(lmao, data)
-	}
-	if !added {
-		if _, err := conn.Write([]byte("*-1\r\n")); err != nil {
-			return err
+		if !added {
+			if _, err := conn.Write([]byte("*-1\r\n")); err != nil {
+				return err
+			}
+			return nil
 		}
-		return nil
+		ans.stream = streams
+		ans.entries = lmao
+		return respAny(conn, ans)
+	} else {
+		for {
+			lmao = [][]XRangeSerialized{}
+			time.Sleep(time.Duration(10 * int(time.Millisecond)))
+			for i := 0; i < len(streams); i++ {
+				var data []XRangeSerialized
+				stream := streams[i]
+				id := ids[i]
+				entries := GlobalStore.XRead(stream, id)
+				fmt.Println(entries)
+				for _, entry := range entries {
+					element := XRangeSerialized{}
+					element.id = entry.ID
+					for key, value := range entry.Fields {
+						element.fields = append(element.fields, key)
+						element.fields = append(element.fields, value)
+						added = true
+					}
+					data = append(data, element)
+				}
+				lmao = append(lmao, data)
+			}
+			if added {
+				break
+			}
+		}
+		ans.stream = streams
+		ans.entries = lmao
+		return respAny(conn, ans)
 	}
-	ans.stream = streams
-	ans.entries = lmao
-	return respAny(conn, ans)
 }
 
 func handleXrange(conn net.Conn, stream, start, end string) error {
